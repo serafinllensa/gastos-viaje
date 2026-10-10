@@ -320,6 +320,14 @@
     return false;
   }
 
+  // Tocar afuera cancela. Safari de iPhone no manda click en zonas vacías, por eso pointerdown.
+  // Se ignora si cae sobre un botón 🗑️: ahí decide el click (segundo toque borra, otro botón se re-arma).
+  document.addEventListener("pointerdown", function (ev) {
+    if (!armado) return;
+    if (ev.target.closest("button[data-borrar-gasto],button[data-borrar-persona]")) return;
+    desarmar();
+  });
+
   // ---------- Delegación de clicks en listas ----------
   document.addEventListener("click", function (ev) {
     var b = ev.target.closest("button[data-editar-gasto],button[data-borrar-gasto],button[data-editar-persona],button[data-borrar-persona]");
