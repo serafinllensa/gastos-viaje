@@ -1,7 +1,7 @@
 /* sw.js — funciona sin internet sin dejar a nadie en una versión vieja.
    Estrategia: RED PRIMERO para todo. Si hay internet, siempre se usa lo último publicado
    (y se actualiza la copia guardada). La copia guardada solo se usa si no hay conexión. */
-var CACHE = "gastos-viaje-v9";
+var CACHE = "gastos-viaje-v10";
 var BASE = ["./", "index.html", "styles.css", "app.js", "ui.js", "manifest.webmanifest",
   "icons/icon-192.png", "icons/apple-touch-icon.png"];
 

@@ -345,3 +345,37 @@ input::placeholder { color: var(--texto-3); }
 
 /* Mientras se cierran, el fondo y la hoja no capturan toques (para reabrir enseguida) */
 .velo:not(.visible), .hoja:not(.visible), .alerta:not(.visible) { pointer-events: none; }
+
+/* ---------- Selector propio estilo iOS (Categoría / Pagó) ---------- */
+.select-oculto { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; overflow: hidden; clip: rect(0 0 0 0); }
+.campo { cursor: pointer; }
+.selector {
+  flex: 1; min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 6px;
+  min-height: 48px; padding: 0; border: 0; background: none; cursor: pointer;
+  font: inherit; font-size: 17px; color: var(--texto-2); text-align: right;
+}
+.selector-valor { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.selector svg { width: 10px; height: 14px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; opacity: .8; }
+.selector:active .selector-valor { opacity: .5; }
+.selector:focus-visible { outline: 2px solid var(--tinte); outline-offset: 2px; border-radius: 6px; }
+.selector:disabled { color: var(--texto-3); cursor: default; }
+.menu-opciones {
+  position: fixed; z-index: 26; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  padding: 0; border-radius: 13px;
+  background: var(--barra);
+  -webkit-backdrop-filter: saturate(180%) blur(30px); backdrop-filter: saturate(180%) blur(30px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .22), 0 0 0 .5px var(--sep);
+  opacity: 0; transform: scale(.85); transition: opacity .16s ease, transform .22s var(--facil);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .menu-opciones { background: var(--celda); } }
+.menu-opciones.visible { opacity: 1; transform: none; }
+.opcion {
+  display: flex; align-items: center; gap: 6px; width: 100%; min-height: 44px; padding: 11px 16px 11px 10px;
+  border: 0; background: none; font: inherit; font-size: 17px; color: var(--texto); text-align: left; cursor: pointer;
+}
+.opcion + .opcion { border-top: .5px solid var(--sep); }
+.opcion:hover, .opcion:focus-visible { background: color-mix(in srgb, var(--texto) 7%, transparent); outline: none; }
+.opcion:active { background: color-mix(in srgb, var(--texto) 12%, transparent); }
+.opcion-tilde { width: 20px; flex-shrink: 0; display: flex; color: var(--tinte); }
+.opcion-tilde svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.opcion[aria-selected="true"] { font-weight: 600; }

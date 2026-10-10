@@ -161,6 +161,110 @@
     });
   }
 
+  // ---------- Selector propio (reemplaza la lista nativa, que en Chrome de Windows se ve genérica) ----------
+  // El <select> sigue existiendo, oculto, y es el que guarda el valor: el resto del código no cambia.
+  var CHEVRON = '<svg viewBox="0 0 12 16" aria-hidden="true"><path d="M3 6l3-3 3 3M3 10l3 3 3-3"/></svg>';
+  var TILDE = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 4.8"/></svg>';
+  var menuAbierto = null;
+  function mejorarSelect(sel) {
+    var btn = document.createElement("button");
+    btn.type = "button"; btn.className = "selector";
+    btn.setAttribute("aria-haspopup", "listbox"); btn.setAttribute("aria-expanded", "false");
+    sel.classList.add("select-oculto"); sel.tabIndex = -1; sel.setAttribute("aria-hidden", "true");
+    sel.insertAdjacentElement("afterend", btn);
+    var campo = sel.closest("label");
+    if (campo) {
+      btn.setAttribute("aria-label", (campo.querySelector("span") || {}).textContent || "");
+      campo.addEventListener("click", function (ev) { ev.preventDefault(); if (!btn.contains(ev.target)) btn.click(); });
+    }
+    function actualizar() {
+      var o = sel.options[sel.selectedIndex];
+      btn.innerHTML = '<span class="selector-valor">' + esc(o ? o.textContent : "—") + "</span>" + CHEVRON;
+      btn.disabled = !sel.options.length || (sel.options.length === 1 && !sel.options[0].value);
+    }
+    new MutationObserver(actualizar).observe(sel, { childList: true, subtree: true, attributes: true });
+    sel.addEventListener("change", actualizar);
+    btn.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      if (menuAbierto && menuAbierto.btn === btn) { cerrarMenu(); return; }
+      abrirMenu(sel, btn);
+    });
+    btn.addEventListener("keydown", function (ev) {
+      if (ev.key === "ArrowDown" || ev.key === "ArrowUp") { ev.preventDefault(); abrirMenu(sel, btn); }
+    });
+    actualizar();
+    return actualizar;
+  }
+  function abrirMenu(sel, btn) {
+    cerrarMenu(true);
+    var menu = document.createElement("div");
+    menu.className = "menu-opciones"; menu.setAttribute("role", "listbox");
+    Array.prototype.forEach.call(sel.options, function (o, i) {
+      if (!o.value && sel.options.length > 1) return;
+      var it = document.createElement("button");
+      it.type = "button"; it.className = "opcion"; it.setAttribute("role", "option");
+      var marcada = i === sel.selectedIndex;
+      it.setAttribute("aria-selected", marcada);
+      it.innerHTML = '<span class="opcion-tilde">' + (marcada ? TILDE : "") + "</span><span>" + esc(o.textContent) + "</span>";
+      it.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        sel.selectedIndex = i; sel.dispatchEvent(new Event("change", { bubbles: true }));
+        cerrarMenu();
+        btn.focus({ preventScroll: true });
+      });
+      menu.appendChild(it);
+    });
+    document.body.appendChild(menu);
+    // Se ubica pegado al selector, abajo o arriba según el lugar que haya.
+    var r = btn.getBoundingClientRect(), vw = window.innerWidth, vh = (window.visualViewport || {}).height || window.innerHeight;
+    var ancho = Math.min(Math.max(220, Math.min(r.width * 0.7, 280)), vw - 24);
+    menu.style.width = ancho + "px";
+    menu.style.left = Math.max(12, Math.min(r.right - ancho, vw - ancho - 12)) + "px";
+    var lugarAbajo = vh - r.bottom - 18, lugarArriba = r.top - 18, natural = menu.scrollHeight;
+    var abajo = lugarAbajo >= natural || lugarAbajo >= lugarArriba;
+    var alto = Math.max(120, Math.min(natural, abajo ? lugarAbajo : lugarArriba)); // si no entra, scrollea adentro
+    menu.style.maxHeight = alto + "px";
+    menu.style.top = (abajo ? r.bottom + 6 : r.top - alto - 6) + "px";
+    menu.style.transformOrigin = (abajo ? "top" : "bottom") + " right";
+    btn.setAttribute("aria-expanded", "true");
+    menuAbierto = { menu: menu, btn: btn };
+    void menu.offsetWidth; menu.classList.add("visible");
+    var actual = menu.querySelector('[aria-selected="true"]') || menu.firstChild;
+    if (actual) { actual.scrollIntoView({ block: "nearest" }); actual.focus({ preventScroll: true }); }
+  }
+  function cerrarMenu(sinAnimar) {
+    if (!menuAbierto) return;
+    var m = menuAbierto.menu; menuAbierto.btn.setAttribute("aria-expanded", "false"); menuAbierto = null;
+    if (sinAnimar) { m.remove(); return; }
+    m.classList.remove("visible");
+    setTimeout(function () { m.remove(); }, 160);
+  }
+  // Tocar afuera solo cierra el menú (como en iOS): ese mismo toque no llega a lo de abajo,
+  // así no se cierra la hoja ni se aprieta otro botón sin querer.
+  var tragarClick = 0;
+  document.addEventListener("pointerdown", function (ev) {
+    if (menuAbierto && !menuAbierto.menu.contains(ev.target) && !menuAbierto.btn.contains(ev.target)) {
+      cerrarMenu(); tragarClick = Date.now();
+    }
+  }, true);
+  document.addEventListener("click", function (ev) {
+    if (tragarClick && Date.now() - tragarClick < 600) { ev.stopPropagation(); ev.preventDefault(); }
+    tragarClick = 0;
+  }, true);
+  document.addEventListener("keydown", function (ev) {
+    if (!menuAbierto) return;
+    var items = Array.prototype.slice.call(menuAbierto.menu.querySelectorAll(".opcion"));
+    var i = items.indexOf(document.activeElement);
+    if (ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); var b = menuAbierto.btn; cerrarMenu(); b.focus(); }
+    else if (ev.key === "ArrowDown") { ev.preventDefault(); (items[i + 1] || items[0]).focus(); }
+    else if (ev.key === "ArrowUp") { ev.preventDefault(); (items[i - 1] || items[items.length - 1]).focus(); }
+    else if (ev.key === "Tab") cerrarMenu();
+  }, true);
+  window.addEventListener("resize", function () { cerrarMenu(true); });
+  document.querySelector(".hoja-cuerpo").addEventListener("scroll", function () { cerrarMenu(true); }, { passive: true });
+  mejorarSelect($("g-categoria"));
+  mejorarSelect($("g-pagopor"));
+
   // ---------- Gastos (en una hoja) ----------
   var editandoGasto = null;
   $("btn-nuevo-gasto").addEventListener("click", function () { abrirHoja(null); });
@@ -181,6 +285,7 @@
     if (!g) $("g-descripcion").focus({ preventScroll: true });
   }
   function cerrarHoja() {
+    cerrarMenu(true);
     if (document.activeElement) document.activeElement.blur();
     cerrarCapa($("velo-hoja"), $("hoja-gasto"), function () { editandoGasto = null; });
   }
