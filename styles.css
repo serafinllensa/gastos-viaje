@@ -248,7 +248,11 @@ input::placeholder { color: var(--texto-3); }
   color: var(--texto-2); cursor: pointer; padding-right: 18px;
   background: no-repeat right center / 12px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5l3 3 3-3' fill='none' stroke='%238e8e93' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");
 }
-.campo select option { color: initial; }
+/* La lista desplegable nativa (Windows/Android) toma el fondo del select: sin esto en modo oscuro
+   sale blanca con letras blancas. Le damos fondo y color propios del tema. */
+.campo select { background-color: var(--celda); color-scheme: light dark; }
+.campo select option, .campo select optgroup { background-color: var(--celda); color: var(--texto); text-align: left; }
+.campo select option:checked { background-color: var(--tinte); color: #fff; }
 .fila-legend { display: flex; align-items: flex-end; justify-content: space-between; padding-right: 12px; }
 .fila-legend .seccion { margin-bottom: 7px; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
