@@ -44,7 +44,7 @@
 
 * { box-sizing: border-box; }
 html, body { overscroll-behavior-y: none; }
-html { -webkit-text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%; scrollbar-gutter: stable; } /* reserva el lugar de la barra de scroll: las pestañas largas no corren todo a la izquierda */
 html, button, a, input, select, label { touch-action: manipulation; }
 body {
   margin: 0;
