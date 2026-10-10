@@ -322,6 +322,9 @@
     igual([j.app, j.version, typeof j.exportado], ["gastos-viaje", 2, "string"]);
     limpio();
     igual(G.getEstado().personas.length, 0);
+    igual(G.validarViaje(archivo), { personas: 3, gastos: 3, pagos: 1 });
+    igual(G.getEstado().personas.length, 0, "validarViaje no toca nada");
+    igual(global.localStorage.getItem(CLAVE), null, "validarViaje no guarda nada");
     var r = G.importarViaje(archivo);
     igual(r, { personas: 3, gastos: 3, pagos: 1 });
     igual(G.getEstado(), antes);
@@ -371,13 +374,20 @@
       con(function (o) { delete o.personas; })
     ];
     malos.forEach(function (m, i) {
+      var errV = null;
+      try { G.validarViaje(m); } catch (e) { errV = e; }
+      if (!errV) throw new Error("validarViaje aceptó el archivo malo #" + i);
       var err = null;
       try { G.importarViaje(m); } catch (e) { err = e; }
       if (!err) throw new Error("el archivo malo #" + i + " se aceptó: " + m.slice(0, 80));
+      igual(err.message, errV.message, "validarViaje e importarViaje dan el mismo error");
       igual(G.getEstado(), antes, "el archivo malo #" + i + " cambió el viaje");
       igual(global.localStorage.getItem(CLAVE), guardado, "el archivo malo #" + i + " cambió lo guardado");
     });
     tira(function () { G.importarViaje("{roto"); }, "no se pudo leer");
+    malos.forEach(function (m) {
+      try { G.importarViaje(m); } catch (e) { if (/\.\./.test(e.message)) throw new Error("doble punto: " + e.message); }
+    });
     tira(function () { G.importarViaje(con(function (o) { o.personas[1].id = o.personas[0].id; })); }, "repetido");
   });
 

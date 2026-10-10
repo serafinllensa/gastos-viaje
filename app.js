@@ -382,12 +382,21 @@
     return "gastos-viaje-" + d.getFullYear() + "-" + dos(d.getMonth() + 1) + "-" + dos(d.getDate()) + ".json";
   }
 
-  function importarViaje(texto) {
+  function leerArchivo(texto) {
     if (typeof texto !== "string" || !texto.trim()) throw new Error("El archivo está vacío.");
     var crudo;
     try { crudo = JSON.parse(texto.replace(/^\uFEFF/, "")); } catch (e) { throw new Error("El archivo no es un viaje de Gastos del viaje (no se pudo leer)."); }
-    var d;
-    try { d = validarDatos(crudo); } catch (e) { throw new Error("El archivo no es válido: " + e.message + ". No se cambió nada."); }
+    try { return validarDatos(crudo); } catch (e) { throw new Error("El archivo no es válido: " + String(e.message).replace(/[.\s]+$/, "") + ". No se cambió nada."); }
+  }
+
+  // Misma validación que importarViaje, pero sin tocar nada. Devuelve las cantidades o tira el mismo error.
+  function validarViaje(texto) {
+    var d = leerArchivo(texto);
+    return { personas: d.personas.length, gastos: d.gastos.length, pagos: d.pagos.length };
+  }
+
+  function importarViaje(texto) {
+    var d = leerArchivo(texto);
     estado = { personas: d.personas, gastos: d.gastos, pagos: d.pagos, sigId: 1 };
     estado.sigId = calcularSigId();
     guardar();
@@ -416,6 +425,7 @@
     parsearMonto: parsearMonto,
     exportarViaje: exportarViaje,
     importarViaje: importarViaje,
+    validarViaje: validarViaje,
     nombreArchivoViaje: nombreArchivoViaje
   };
 

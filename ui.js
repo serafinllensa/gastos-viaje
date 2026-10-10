@@ -80,6 +80,8 @@
     var listo = false;
     function fin() {
       if (listo) return; listo = true;
+      // Si en el medio se volvió a abrir (ej: "+ Gasto" enseguida de guardar), este cierre viejo no hace nada.
+      if (panel.classList.contains("visible")) return;
       velo.hidden = true; panel.hidden = true;
       if ($("hoja-gasto").hidden && $("alerta").hidden) document.body.classList.remove("bloqueado");
       if (alTerminar) alTerminar();
@@ -189,7 +191,11 @@
     var r = intentar(function () {
       return editando ? G.editarGasto(editando, datos) : G.agregarGasto(datos);
     }, $("g-error"));
-    if (!r.ok) return;
+    if (!r.ok) {
+      // Que el error quede a la vista aunque el teclado del iPhone tape la parte de abajo.
+      $("g-error").scrollIntoView({ block: "nearest", behavior: "smooth" });
+      return;
+    }
     toast(editando ? "Gasto actualizado" : "Gasto agregado");
     cerrarHoja(); render();
   });
@@ -275,6 +281,8 @@
     var lector = new FileReader();
     lector.onload = function () {
       var texto = String(lector.result || "");
+      var error = prevalidar(texto);
+      if (error) { toast(error, true); return; }
       var hayDatos = personas().length || gastos().length;
       var cargar = function () {
         var r = intentar(function () { return G.importarViaje(texto); });
@@ -297,6 +305,20 @@
     lector.onerror = function () { toast("No se pudo leer el archivo", true); };
     lector.readAsText(f);
   });
+
+  // Revisa el archivo ANTES de preguntar si se reemplaza el viaje. Si app.js expone validarViaje, usa esa
+  // validación completa; si no, chequea lo básico. importarViaje igual vuelve a validar todo y no toca nada si falla.
+  function prevalidar(texto) {
+    if (tiene("validarViaje")) {
+      try { G.validarViaje(texto); return null; } catch (e) { return (e && e.message) || "El archivo no es válido."; }
+    }
+    var d;
+    try { d = JSON.parse(texto); } catch (e) { return "Ese archivo no es un viaje guardado de esta app."; }
+    if (!d || typeof d !== "object" || !Array.isArray(d.personas) || !Array.isArray(d.gastos)) {
+      return "Ese archivo no es un viaje guardado de esta app.";
+    }
+    return null;
+  }
 
   // ---------- Render ----------
   function renderFormGasto(g) {
