@@ -11,11 +11,12 @@
     };
     require("./app.js");
   }
-  var G = global.Gastos, CLAVE = "gastos-viaje-v1";
-  var respaldo = global.localStorage.getItem(CLAVE); // no pisar datos reales en el navegador
+  var G = global.Gastos, CLAVE = "gastos-viaje-v2", CLAVE_V1 = "gastos-viaje-v1";
+  // no pisar datos reales en el navegador
+  var respaldo = global.localStorage.getItem(CLAVE), respaldoV1 = global.localStorage.getItem(CLAVE_V1);
   var ok = 0, fallas = [];
 
-  function limpio() { global.localStorage.removeItem(CLAVE); G.cargar(); }
+  function limpio() { global.localStorage.removeItem(CLAVE); global.localStorage.removeItem(CLAVE_V1); G.cargar(); }
   function igual(a, b, msg) {
     var A = JSON.stringify(a), B = JSON.stringify(b);
     if (A !== B) throw new Error((msg || "") + "\n   esperaba " + B + "\n   obtuve   " + A);
@@ -142,9 +143,9 @@
     igual(G.totalViaje(), 13500);
     igual(G.resumenPorCategoria(), [{ categoria: "Nafta", total: 9000 }, { categoria: "Comida", total: 4500 }]);
     igual(G.totalesPorPersona(), [
-      { id: p[0], nombre: "Ana", pagado: 3000, consumido: 5500, balance: -2500 },
-      { id: p[1], nombre: "Beto", pagado: 9000, consumido: 5500, balance: 3500 },
-      { id: p[2], nombre: "Caro", pagado: 1500, consumido: 2500, balance: -1000 }
+      { id: p[0], nombre: "Ana", pagado: 3000, consumido: 5500, pagosHechos: 0, pagosRecibidos: 0, balance: -2500 },
+      { id: p[1], nombre: "Beto", pagado: 9000, consumido: 5500, pagosHechos: 0, pagosRecibidos: 0, balance: 3500 },
+      { id: p[2], nombre: "Caro", pagado: 1500, consumido: 2500, pagosHechos: 0, pagosRecibidos: 0, balance: -1000 }
     ]);
   });
 
@@ -161,7 +162,7 @@
   test("datos corruptos no rompen", function () {
     global.localStorage.setItem(CLAVE, "{no es json");
     G.cargar();
-    igual(G.getEstado(), { personas: [], gastos: [] });
+    igual(G.getEstado(), { personas: [], gastos: [], pagos: [] });
   });
 
   test("getEstado devuelve copias", function () {
@@ -225,8 +226,200 @@
     igual(G.getEstado().gastos.length, 1);
   });
 
+  // ---------- v2: pagos ----------
+  function casoABC() {
+    var p = tres();
+    G.agregarGasto({ descripcion: "Súper", monto: 30000, categoria: "Súper", pagoPor: p[0], entre: p });
+    G.agregarGasto({ descripcion: "Nafta", monto: 10000, categoria: "Nafta", pagoPor: p[1], entre: [p[0], p[1]] });
+    G.agregarGasto({ descripcion: "Varios", monto: 100, categoria: "Otros", pagoPor: p[2], entre: p });
+    return p; // Caro le debe 9.934 a Ana, Beto le debe 5.033 a Ana
+  }
+
+  test("registrar un pago descuenta la deuda", function () {
+    var p = casoABC();
+    var pago = G.registrarPago(p[2], p[0], 9934);
+    igual([pago.de, pago.a, pago.monto], [p[2], p[0], 9934]);
+    igual(G.calcularDeudas(), [{ de: p[1], a: p[0], monto: 5033 }]);
+    var t = G.totalesPorPersona();
+    igual([t[2].pagado, t[2].consumido, t[2].pagosHechos, t[2].balance], [100, 10034, 9934, 0]);
+    igual([t[0].pagosRecibidos, t[0].balance], [9934, 5033]);
+    igual(G.totalViaje(), 40100, "los pagos no cambian el total del viaje");
+    igual(G.getEstado().pagos.length, 1);
+  });
+
+  test("pagos parciales y todos a mano", function () {
+    var p = casoABC();
+    G.registrarPago(p[1], p[0], "2.000");
+    igual(G.calcularDeudas(), [{ de: p[2], a: p[0], monto: 9934 }, { de: p[1], a: p[0], monto: 3033 }]);
+    G.registrarPago(p[1], p[0], 3033);
+    G.registrarPago(p[2], p[0], 9934);
+    igual(G.calcularDeudas(), []);
+    var txt = G.textoWhatsApp();
+    ["a mano", "*Ya pagado:*", "Beto le pagó $2.000 a Ana", "Caro le pagó $9.934 a Ana"].forEach(function (s) {
+      if (txt.indexOf(s) === -1) throw new Error("falta: " + s + "\n" + txt);
+    });
+  });
+
+  test("validaciones de pagos", function () {
+    var p = casoABC();
+    tira(function () { G.registrarPago(p[2], p[0], 9935); }, "supera lo que le falta saldar ($9.934)");
+    tira(function () { G.registrarPago(p[1], p[0], 6000); }, "($5.033)");
+    tira(function () { G.registrarPago(p[0], p[1], 100); }, "Ana no tiene nada pendiente para pagar");
+    tira(function () { G.registrarPago(p[2], p[1], 100); }, "Beto no tiene nada pendiente para cobrar");
+    tira(function () { G.registrarPago(p[0], p[0], 100); }, "a sí misma");
+    tira(function () { G.registrarPago("x", p[0], 100); }, "no existe");
+    tira(function () { G.registrarPago(p[2], p[0], "30,000"); }, "ej: 30.000");
+    tira(function () { G.registrarPago(p[2], p[0], 0); }, "mayor a cero");
+    igual(G.getEstado().pagos.length, 0);
+  });
+
+  test("deshacer un pago y borrar personas con pagos", function () {
+    var p = casoABC();
+    var d = G.agregarPersona("Dani").id;
+    var pago = G.registrarPago(p[1], p[0], 5033);
+    G.borrarGasto(G.getEstado().gastos[1].id); // la nafta de Beto
+    tira(function () { G.borrarPersona(p[1]); }, "tiene gastos");
+    G.borrarPago(pago.id);
+    igual(G.getEstado().pagos, []);
+    tira(function () { G.borrarPago(pago.id); }, "no existe");
+    G.borrarPersona(d);
+    // persona sin gastos pero con pagos
+    limpio(); var q = tres();
+    var g = G.agregarGasto({ descripcion: "Cena", monto: 300, categoria: "Comida", pagoPor: q[0], entre: [q[0], q[1]] });
+    var pg = G.registrarPago(q[1], q[0], 150);
+    G.borrarGasto(g.id);
+    tira(function () { G.borrarPersona(q[1]); }, "tiene pagos registrados");
+    G.borrarPago(pg.id);
+    G.borrarPersona(q[1]);
+  });
+
+  test("editar un gasto después de un pago recalcula bien", function () {
+    var p = casoABC();
+    G.registrarPago(p[2], p[0], 9934); // Caro saldó todo
+    var nafta = G.getEstado().gastos[1];
+    G.editarGasto(nafta.id, { entre: p }); // ahora la nafta es entre los 3
+    // Nafta 10.000 / 3 = 3.333 c/u y el peso que sobra lo absorbe Beto. Varios 100 / 3 = 33 y sobra 1 para Caro.
+    var t = G.totalesPorPersona();
+    igual(t.map(function (x) { return x.consumido; }), [13366, 13367, 13367]);
+    igual(t.map(function (x) { return x.balance; }), [6700, -3367, -3333]);
+    igual(G.calcularDeudas(), [{ de: p[1], a: p[0], monto: 3367 }, { de: p[2], a: p[0], monto: 3333 }]);
+    // si el gasto baja después del pago, la deuda se da vuelta y nadie pierde plata
+    limpio(); var q = tres();
+    var g = G.agregarGasto({ descripcion: "Cena", monto: 3000, categoria: "Comida", pagoPor: q[0], entre: q });
+    G.registrarPago(q[2], q[0], 1000);
+    G.editarGasto(g.id, { entre: [q[0], q[1]] }); // Caro ya no comió, pero había pagado 1.000
+    igual(G.totalesPorPersona().map(function (x) { return x.balance; }), [500, -1500, 1000]);
+    igual(G.calcularDeudas(), [{ de: q[1], a: q[2], monto: 1000 }, { de: q[1], a: q[0], monto: 500 }]);
+  });
+
+  // ---------- v2: archivo ----------
+  test("exportar e importar deja todo idéntico", function () {
+    var p = casoABC();
+    G.registrarPago(p[1], p[0], 2000);
+    var antes = G.getEstado(), deudas = G.calcularDeudas(), wa = G.textoWhatsApp();
+    var archivo = G.exportarViaje();
+    var j = JSON.parse(archivo);
+    igual([j.app, j.version, typeof j.exportado], ["gastos-viaje", 2, "string"]);
+    limpio();
+    igual(G.getEstado().personas.length, 0);
+    var r = G.importarViaje(archivo);
+    igual(r, { personas: 3, gastos: 3, pagos: 1 });
+    igual(G.getEstado(), antes);
+    igual(G.calcularDeudas(), deudas);
+    igual(G.textoWhatsApp(), wa);
+    G.cargar();
+    igual(G.getEstado(), antes, "queda guardado al recargar");
+  });
+
+  test("después de importar no se repiten ids", function () {
+    tres();
+    G.importarViaje(JSON.stringify({ app: "gastos-viaje", version: 2,
+      personas: [{ id: "p1", nombre: "Ana" }, { id: "p40", nombre: "Beto" }],
+      gastos: [{ id: "g41", descripcion: "Cena", monto: 100, categoria: "Comida", pagoPor: "p1", entre: ["p1", "p40"] }],
+      pagos: [{ id: "x42", de: "p40", a: "p1", monto: 10 }] }));
+    var nueva = G.agregarPersona("Caro"), g = G.agregarGasto({ descripcion: "Pan", monto: 50, categoria: "Súper", pagoPor: "p1", entre: ["p1"] });
+    var ids = G.getEstado().personas.concat(G.getEstado().gastos, G.getEstado().pagos).map(function (x) { return x.id; });
+    igual(ids.length, new Set(ids).size, "ids únicos: " + ids.join(","));
+    if (["p1", "p40", "g41", "x42"].indexOf(nueva.id) !== -1 || ["p1", "p40", "g41", "x42"].indexOf(g.id) !== -1) throw new Error("repitió un id");
+  });
+
+  test("archivos rotos o inválidos no cambian nada", function () {
+    var p = casoABC();
+    G.registrarPago(p[1], p[0], 2000);
+    var antes = G.getEstado(), guardado = global.localStorage.getItem(CLAVE);
+    var bueno = JSON.parse(G.exportarViaje());
+    function con(fn) { var o = JSON.parse(JSON.stringify(bueno)); fn(o); return JSON.stringify(o); }
+    var malos = [
+      "", "   ", "{roto", "null", "[]", "42", JSON.stringify({ hola: 1 }),
+      con(function (o) { o.app = "otra-app"; }),
+      con(function (o) { o.version = 9; }),
+      con(function (o) { o.personas[1].id = o.personas[0].id; }),           // persona repetida
+      con(function (o) { o.gastos[1].id = o.personas[0].id; }),             // id repetido entre listas
+      con(function (o) { o.personas[1].nombre = o.personas[0].nombre.toUpperCase(); }),
+      con(function (o) { o.personas[0].nombre = ""; }),
+      con(function (o) { o.gastos[0].pagoPor = "nadie"; }),
+      con(function (o) { o.gastos[0].entre = ["nadie"]; }),
+      con(function (o) { o.gastos[0].entre = []; }),
+      con(function (o) { o.gastos[0].monto = 10.5; }),
+      con(function (o) { o.gastos[0].monto = -1; }),
+      con(function (o) { o.gastos[0].categoria = "Joda"; }),
+      con(function (o) { delete o.gastos[0].id; }),
+      con(function (o) { o.pagos[0].a = o.pagos[0].de; }),
+      con(function (o) { o.pagos[0].de = "nadie"; }),
+      con(function (o) { o.pagos[0].monto = 0; }),
+      con(function (o) { o.pagos = "x"; }),
+      con(function (o) { delete o.personas; })
+    ];
+    malos.forEach(function (m, i) {
+      var err = null;
+      try { G.importarViaje(m); } catch (e) { err = e; }
+      if (!err) throw new Error("el archivo malo #" + i + " se aceptó: " + m.slice(0, 80));
+      igual(G.getEstado(), antes, "el archivo malo #" + i + " cambió el viaje");
+      igual(global.localStorage.getItem(CLAVE), guardado, "el archivo malo #" + i + " cambió lo guardado");
+    });
+    tira(function () { G.importarViaje("{roto"); }, "no se pudo leer");
+    tira(function () { G.importarViaje(con(function (o) { o.personas[1].id = o.personas[0].id; })); }, "repetido");
+  });
+
+  test("importa datos de la v1 sin pagos", function () {
+    var v1 = JSON.stringify({ personas: [{ id: "p1", nombre: "Ana" }, { id: "p2", nombre: "Beto" }],
+      gastos: [{ id: "g3", descripcion: "Cena", monto: 1000, categoria: "Comida", pagoPor: "p1", entre: ["p1", "p2"] }], sigId: 4 });
+    igual(G.importarViaje(v1), { personas: 2, gastos: 1, pagos: 0 });
+    igual(G.calcularDeudas(), [{ de: "p2", a: "p1", monto: 500 }]);
+  });
+
+  // ---------- v2: migración ----------
+  test("cargar migra solo desde la v1 y la deja intacta", function () {
+    var v1 = JSON.stringify({ personas: [{ id: "p1", nombre: "Ana" }, { id: "p2", nombre: "Beto" }],
+      gastos: [{ id: "g3", descripcion: "Cena", monto: 1000, categoria: "Comida", pagoPor: "p1", entre: ["p1", "p2"] }], sigId: 4 });
+    global.localStorage.removeItem(CLAVE);
+    global.localStorage.setItem(CLAVE_V1, v1);
+    G.cargar();
+    igual(G.getEstado().personas.length, 2);
+    igual(G.getEstado().pagos, []);
+    igual(global.localStorage.getItem(CLAVE_V1), v1, "la v1 queda como respaldo");
+    if (!global.localStorage.getItem(CLAVE)) throw new Error("no guardó en la v2");
+    var nueva = G.agregarPersona("Caro");
+    if (["p1", "p2", "g3"].indexOf(nueva.id) !== -1) throw new Error("repitió un id después de migrar");
+  });
+
+  test("si ya hay datos v2 no los pisa con la v1", function () {
+    tres(); // queda guardado en v2
+    var v2 = global.localStorage.getItem(CLAVE);
+    global.localStorage.setItem(CLAVE_V1, JSON.stringify({ personas: [{ id: "p1", nombre: "Viejo" }], gastos: [] }));
+    G.cargar();
+    igual(G.getEstado().personas.map(function (x) { return x.nombre; }), ["Ana", "Beto", "Caro"]);
+    igual(global.localStorage.getItem(CLAVE), v2);
+  });
+
+  test("nombre del archivo", function () {
+    if (!/^gastos-viaje-\d{4}-\d{2}-\d{2}\.json$/.test(G.nombreArchivoViaje())) throw new Error(G.nombreArchivoViaje());
+  });
+
   // restaurar datos del usuario
-  if (respaldo === null) global.localStorage.removeItem(CLAVE); else global.localStorage.setItem(CLAVE, respaldo);
+  [[CLAVE, respaldo], [CLAVE_V1, respaldoV1]].forEach(function (r) {
+    if (r[1] === null) global.localStorage.removeItem(r[0]); else global.localStorage.setItem(r[0], r[1]);
+  });
   G.cargar();
 
   var resumen = ok + " ok, " + fallas.length + " fallas";

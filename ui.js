@@ -1,46 +1,12 @@
-/* ui.js — interfaz de "Gastos del viaje". Solo usa window.Gastos (app.js). */
+/* ui.js — interfaz de "Gastos del viaje" (v2, estilo iOS). Solo usa window.Gastos (app.js). */
 (function () {
   "use strict";
 
-  // ---------- Modo maqueta (solo si app.js todavía no existe) ----------
-  // Datos fijos de ejemplo: no se calcula nada acá, los resultados están escritos a mano.
-  var demo = !window.Gastos;
-  var G = window.Gastos || crearMaqueta();
-
-  function crearMaqueta() {
-    var estado = {
-      personas: [{ id: "p1", nombre: "Juli" }, { id: "p2", nombre: "Tomi" }, { id: "p3", nombre: "Caro" }],
-      gastos: [
-        { id: "g1", descripcion: "Nafta ida", monto: 30000, categoria: "Nafta", pagoPor: "p1", entre: ["p1", "p2", "p3"] },
-        { id: "g2", descripcion: "Cabaña 2 noches", monto: 90000, categoria: "Alojamiento", pagoPor: "p2", entre: ["p1", "p2", "p3"] },
-        { id: "g3", descripcion: "Asado", monto: 24000, categoria: "Comida", pagoPor: "p3", entre: ["p1", "p2", "p3"] }
-      ]
-    };
-    var noDisponible = function () { throw new Error("Modo maqueta: falta app.js para guardar cambios."); };
-    return {
-      CATEGORIAS: ["Comida", "Súper", "Nafta", "Alojamiento", "Salidas", "Otros"],
-      cargar: function () {}, guardar: function () {},
-      getEstado: function () { return estado; },
-      agregarPersona: noDisponible, editarPersona: noDisponible, borrarPersona: noDisponible,
-      agregarGasto: noDisponible, editarGasto: noDisponible, borrarGasto: noDisponible,
-      calcularDeudas: function () { return [{ de: "p1", a: "p2", monto: 18000 }, { de: "p3", a: "p2", monto: 24000 }]; },
-      resumenPorCategoria: function () {
-        return [{ categoria: "Alojamiento", total: 90000 }, { categoria: "Nafta", total: 30000 }, { categoria: "Comida", total: 24000 }];
-      },
-      totalesPorPersona: function () {
-        return [
-          { id: "p1", nombre: "Juli", pagado: 30000, consumido: 48000, balance: -18000 },
-          { id: "p2", nombre: "Tomi", pagado: 90000, consumido: 48000, balance: 42000 },
-          { id: "p3", nombre: "Caro", pagado: 24000, consumido: 48000, balance: -24000 }
-        ];
-      },
-      totalViaje: function () { return 144000; },
-      textoWhatsApp: function () { return "💸 Gastos del viaje\nJuli le paga $18.000 a Tomi\nCaro le paga $24.000 a Tomi"; }
-    };
-  }
+  var G = window.Gastos;
+  var $ = function (id) { return document.getElementById(id); };
+  if (!G) { $("aviso-error").hidden = false; return; }
 
   // ---------- Utilidades ----------
-  var $ = function (id) { return document.getElementById(id); };
   var fmt = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
   function plata(n) {
     n = Number(n) || 0;
@@ -52,8 +18,11 @@
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
   }
-  function personas() { return G.getEstado().personas || []; }
-  function gastos() { return G.getEstado().gastos || []; }
+  function tiene(fn) { return typeof G[fn] === "function"; }
+  function estado() { return G.getEstado() || {}; }
+  function personas() { return estado().personas || []; }
+  function gastos() { return estado().gastos || []; }
+  function pagos() { return estado().pagos || []; }
   function nombreDe(id) {
     var p = personas().find(function (x) { return x.id === id; });
     return p ? p.nombre : (id == null ? "?" : String(id));
@@ -66,15 +35,24 @@
       return { ok: false };
     }
   }
-  function mostrarError(el, msg) { el.textContent = msg; el.hidden = false; }
+  function mostrarError(el, msg) { el.hidden = true; void el.offsetWidth; el.textContent = msg; el.hidden = false; }
   function ocultarError(el) { el.textContent = ""; el.hidden = true; }
   var toastTimer;
   function toast(msg, esError) {
     var t = $("toast");
+    t.hidden = true; void t.offsetWidth;
     t.textContent = msg; t.hidden = false;
     t.classList.toggle("error-toast", !!esError);
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { t.hidden = true; }, 2600);
+  }
+  var ICONO = {
+    editar: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>',
+    borrar: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v5.5M14 11v5.5"/></svg>'
+  };
+  function botonIcono(tipo, dato, id, etiqueta) {
+    return '<button type="button" class="icono' + (tipo === "borrar" ? " peligro" : "") + '" data-' + dato + '="' + esc(id) +
+      '" aria-label="' + esc(etiqueta) + '">' + ICONO[tipo] + "</button>";
   }
 
   // ---------- Pestañas ----------
@@ -90,18 +68,65 @@
     window.scrollTo(0, 0);
   }
 
+  // ---------- Capas: hoja y cartel ----------
+  function abrirCapa(velo, panel) {
+    velo.hidden = false; panel.hidden = false;
+    document.body.classList.add("bloqueado");
+    void panel.offsetWidth; // fuerza el reflow para que corra la transición
+    velo.classList.add("visible"); panel.classList.add("visible");
+  }
+  function cerrarCapa(velo, panel, alTerminar) {
+    velo.classList.remove("visible"); panel.classList.remove("visible");
+    var listo = false;
+    function fin() {
+      if (listo) return; listo = true;
+      velo.hidden = true; panel.hidden = true;
+      if ($("hoja-gasto").hidden && $("alerta").hidden) document.body.classList.remove("bloqueado");
+      if (alTerminar) alTerminar();
+    }
+    panel.addEventListener("transitionend", fin, { once: true });
+    setTimeout(fin, 420); // por si no hay transición (movimiento reducido)
+  }
+
+  // Cartel estilo iOS. opciones: {titulo, texto, ok, peligro, alAceptar}
+  var alertaActual = null;
+  function confirmar(op) {
+    alertaActual = op;
+    $("alerta-titulo").textContent = op.titulo;
+    $("alerta-texto").textContent = op.texto || "";
+    $("alerta-texto").hidden = !op.texto;
+    $("alerta-ok").textContent = op.ok || "Eliminar";
+    $("alerta-ok").classList.toggle("peligro", op.peligro !== false);
+    abrirCapa($("velo-alerta"), $("alerta"));
+    $("alerta-cancelar").focus({ preventScroll: true });
+  }
+  function cerrarAlerta(aceptar) {
+    var op = alertaActual; alertaActual = null;
+    if (!op) return;
+    cerrarCapa($("velo-alerta"), $("alerta"));
+    if (aceptar && op.alAceptar) op.alAceptar();
+  }
+  $("alerta-cancelar").addEventListener("click", function () { cerrarAlerta(false); });
+  $("alerta-ok").addEventListener("click", function () { cerrarAlerta(true); });
+  $("velo-alerta").addEventListener("click", function () { cerrarAlerta(false); });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key !== "Escape") return;
+    if (alertaActual) cerrarAlerta(false);
+    else if (!$("hoja-gasto").hidden) cerrarHoja();
+  });
+
   // ---------- Personas ----------
   var editandoPersona = null;
   $("form-persona").addEventListener("submit", function (ev) {
     ev.preventDefault();
     var nombre = $("p-nombre").value.trim();
+    var editando = editandoPersona;
     var r = intentar(function () {
-      return editandoPersona ? G.editarPersona(editandoPersona, nombre) : G.agregarPersona(nombre);
+      return editando ? G.editarPersona(editando, nombre) : G.agregarPersona(nombre);
     }, $("p-error"));
     if (!r.ok) return;
-    toast(editandoPersona ? "Persona actualizada" : "Persona agregada");
+    toast(editando ? "Persona actualizada" : "Persona agregada");
     cancelarPersona(); render();
-    $("p-nombre").focus();
   });
   $("p-cancelar").addEventListener("click", cancelarPersona);
   function cancelarPersona() {
@@ -110,39 +135,64 @@
     $("form-persona-titulo").textContent = "Agregar persona";
     $("p-submit").textContent = "Agregar";
     $("p-cancelar").hidden = true;
-    $("form-persona").classList.remove("editando");
     ocultarError($("p-error"));
   }
   function editarPersona(id) {
     editandoPersona = id;
     $("p-nombre").value = nombreDe(id);
-    $("form-persona-titulo").textContent = "Editar persona";
+    $("form-persona-titulo").textContent = "Editar a " + nombreDe(id);
     $("p-submit").textContent = "Guardar";
     $("p-cancelar").hidden = false;
-    $("form-persona").classList.add("editando");
     irA("personas"); $("p-nombre").focus();
   }
-  function borrarPersona(id, btn) {
-    if (!pedirSegundoToque(btn)) return;
-    if (intentar(function () { return G.borrarPersona(id); }).ok) {
-      if (editandoPersona === id) cancelarPersona();
-      toast("Persona borrada"); render();
-    }
+  function borrarPersona(id) {
+    var nombre = nombreDe(id);
+    confirmar({
+      titulo: "¿Seguro que querés eliminar a " + nombre + "?",
+      texto: "Esta acción no se puede deshacer.",
+      alAceptar: function () {
+        if (intentar(function () { return G.borrarPersona(id); }).ok) {
+          if (editandoPersona === id) cancelarPersona();
+          toast(nombre + " eliminada del viaje"); render();
+        }
+      }
+    });
   }
 
-  // ---------- Gastos ----------
+  // ---------- Gastos (en una hoja) ----------
   var editandoGasto = null;
+  $("btn-nuevo-gasto").addEventListener("click", function () { abrirHoja(null); });
+  $("g-cancelar").addEventListener("click", cerrarHoja);
+  $("velo-hoja").addEventListener("click", cerrarHoja);
+  function abrirHoja(g) {
+    editandoGasto = g ? g.id : null;
+    $("form-gasto").reset();
+    ocultarError($("g-error"));
+    renderFormGasto(g);
+    $("g-descripcion").value = g ? g.descripcion : "";
+    $("g-monto").value = g ? fmt.format(g.monto) : "";
+    $("form-gasto-titulo").textContent = g ? "Editar gasto" : "Nuevo gasto";
+    $("g-submit").textContent = g ? "Guardar" : "Agregar";
+    abrirCapa($("velo-hoja"), $("hoja-gasto"));
+    if (!personas().length) return;
+    // En iPhone el teclado solo abre si el focus ocurre dentro del toque, por eso va sin demora.
+    if (!g) $("g-descripcion").focus({ preventScroll: true });
+  }
+  function cerrarHoja() {
+    if (document.activeElement) document.activeElement.blur();
+    cerrarCapa($("velo-hoja"), $("hoja-gasto"), function () { editandoGasto = null; });
+  }
   $("form-gasto").addEventListener("submit", function (ev) {
     ev.preventDefault();
     var datos = leerFormGasto();
+    var editando = editandoGasto;
     var r = intentar(function () {
-      return editandoGasto ? G.editarGasto(editandoGasto, datos) : G.agregarGasto(datos);
+      return editando ? G.editarGasto(editando, datos) : G.agregarGasto(datos);
     }, $("g-error"));
     if (!r.ok) return;
-    toast(editandoGasto ? "Gasto actualizado" : "Gasto agregado");
-    cancelarGasto(); render();
+    toast(editando ? "Gasto actualizado" : "Gasto agregado");
+    cerrarHoja(); render();
   });
-  $("g-cancelar").addEventListener("click", cancelarGasto);
   $("g-todos").addEventListener("click", function () {
     var cajas = $("g-entre").querySelectorAll("input");
     var todas = Array.prototype.every.call(cajas, function (c) { return c.checked; });
@@ -157,92 +207,156 @@
       entre: Array.prototype.map.call($("g-entre").querySelectorAll("input:checked"), function (c) { return c.value; })
     };
   }
-  function cancelarGasto() {
-    editandoGasto = null;
-    $("form-gasto").reset();
-    $("form-gasto-titulo").textContent = "Nuevo gasto";
-    $("g-submit").textContent = "Agregar gasto";
-    $("g-cancelar").hidden = true;
-    $("form-gasto").classList.remove("editando");
-    ocultarError($("g-error"));
-    renderFormGasto();
-  }
   function editarGasto(id) {
     var g = gastos().find(function (x) { return x.id === id; });
-    if (!g) return;
-    editandoGasto = id;
-    renderFormGasto(g);
-    $("g-descripcion").value = g.descripcion;
-    $("g-monto").value = fmt.format(g.monto);
-    $("form-gasto-titulo").textContent = "Editar gasto";
-    $("g-submit").textContent = "Guardar cambios";
-    $("g-cancelar").hidden = false;
-    $("form-gasto").classList.add("editando");
-    irA("gastos"); $("g-descripcion").focus();
+    if (g) abrirHoja(g);
   }
-  function borrarGasto(id, btn) {
+  function borrarGasto(id) {
     var g = gastos().find(function (x) { return x.id === id; });
-    if (!pedirSegundoToque(btn)) return;
-    if (intentar(function () { return G.borrarGasto(id); }).ok) {
-      if (editandoGasto === id) cancelarGasto();
-      toast("Gasto borrado"); render();
-    }
+    confirmar({
+      titulo: "¿Seguro que querés eliminar " + (g ? "“" + g.descripcion + "”" : "este gasto") + "?",
+      texto: g ? plata(g.monto) + " · pagó " + nombreDe(g.pagoPor) : "",
+      alAceptar: function () {
+        if (intentar(function () { return G.borrarGasto(id); }).ok) { toast("Gasto eliminado"); render(); }
+      }
+    });
   }
+
+  // ---------- Pagos ----------
+  function marcarPagada(de, a, monto) {
+    confirmar({
+      titulo: "¿Marcar como pagada?",
+      texto: nombreDe(de) + " le pagó " + plata(monto) + " a " + nombreDe(a) + ".",
+      ok: "Marcar", peligro: false,
+      alAceptar: function () {
+        if (intentar(function () { return G.registrarPago(de, a, monto); }).ok) { toast("Deuda saldada"); render(); }
+      }
+    });
+  }
+  function borrarPago(id) {
+    var p = pagos().find(function (x) { return x.id === id; });
+    confirmar({
+      titulo: "¿Seguro que querés eliminar este pago?",
+      texto: p ? nombreDe(p.de) + " → " + nombreDe(p.a) + " · " + plata(p.monto) + ". La deuda vuelve a aparecer." : "",
+      alAceptar: function () {
+        if (intentar(function () { return G.borrarPago(id); }).ok) { toast("Pago eliminado"); render(); }
+      }
+    });
+  }
+
+  // ---------- Guardar y cargar el viaje ----------
+  $("btn-guardar-viaje").addEventListener("click", function () {
+    var r = intentar(function () { return G.exportarViaje(); });
+    if (!r.ok) return;
+    var hoy = new Date();
+    var nombre = tiene("nombreArchivoViaje") ? G.nombreArchivoViaje() : "gastos-viaje-" + hoy.getFullYear() + "-" + String(hoy.getMonth() + 1).padStart(2, "0") + "-" +
+      String(hoy.getDate()).padStart(2, "0") + ".json";
+    var archivo;
+    try { archivo = new File([r.valor], nombre, { type: "application/json" }); } catch (e) { archivo = null; }
+    if (archivo && navigator.canShare && navigator.canShare({ files: [archivo] })) {
+      navigator.share({ files: [archivo], title: "Gastos del viaje" })
+        .then(function () { toast("Viaje guardado"); })
+        .catch(function (e) { if (!e || e.name !== "AbortError") descargar(r.valor, nombre); });
+    } else {
+      descargar(r.valor, nombre);
+    }
+  });
+  function descargar(texto, nombre) {
+    var url = URL.createObjectURL(new Blob([texto], { type: "application/json" }));
+    var a = document.createElement("a");
+    a.href = url; a.download = nombre; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+    toast("Viaje guardado en Descargas");
+  }
+  $("btn-cargar-viaje").addEventListener("click", function () { $("input-archivo").value = ""; $("input-archivo").click(); });
+  $("input-archivo").addEventListener("change", function () {
+    var f = this.files && this.files[0];
+    if (!f) return;
+    var lector = new FileReader();
+    lector.onload = function () {
+      var texto = String(lector.result || "");
+      var hayDatos = personas().length || gastos().length;
+      var cargar = function () {
+        var r = intentar(function () { return G.importarViaje(texto); });
+        if (r.ok) {
+          var c = r.valor || {};
+          var cant = function (n, uno, varios) { return n + " " + (n === 1 ? uno : varios); };
+          cancelarPersona(); render(); irA("gastos");
+          toast(typeof c.personas === "number"
+            ? "Se cargaron " + cant(c.personas, "persona", "personas") + " y " + cant(c.gastos || 0, "gasto", "gastos")
+            : "Viaje cargado");
+        }
+      };
+      if (!hayDatos) return cargar();
+      confirmar({
+        titulo: "¿Reemplazar el viaje actual?",
+        texto: "Se cambian todos los datos de este celular por los de “" + f.name + "”. Si querés, guardá antes el viaje actual.",
+        ok: "Reemplazar", alAceptar: cargar
+      });
+    };
+    lector.onerror = function () { toast("No se pudo leer el archivo", true); };
+    lector.readAsText(f);
+  });
 
   // ---------- Render ----------
   function renderFormGasto(g) {
     var ps = personas();
     var cat = $("g-categoria"), pago = $("g-pagopor"), entre = $("g-entre");
-    var catSel = g ? g.categoria : (cat.value || G.CATEGORIAS[0]);
-    var pagoSel = g ? g.pagoPor : pago.value;
+    var catSel = g ? g.categoria : G.CATEGORIAS[0];
+    var pagoSel = g ? g.pagoPor : (ps[0] && ps[0].id);
     var entreSel = g ? g.entre : null;
 
     cat.innerHTML = G.CATEGORIAS.map(function (c) {
-      return '<option' + (c === catSel ? " selected" : "") + ">" + esc(c) + "</option>";
+      return "<option" + (c === catSel ? " selected" : "") + ">" + esc(c) + "</option>";
     }).join("");
-
     pago.innerHTML = ps.length
       ? ps.map(function (p) {
           return '<option value="' + esc(p.id) + '"' + (p.id === pagoSel ? " selected" : "") + ">" + esc(p.nombre) + "</option>";
         }).join("")
-      : '<option value="">Primero agregá personas</option>';
-
+      : '<option value="">Sin personas</option>';
     entre.innerHTML = ps.length
       ? ps.map(function (p) {
           var on = entreSel ? entreSel.indexOf(p.id) !== -1 : true;
           return '<label class="chip"><input type="checkbox" value="' + esc(p.id) + '"' + (on ? " checked" : "") +
             "><span>" + esc(p.nombre) + "</span></label>";
         }).join("")
-      : '<p class="vacio">Agregá personas en la pestaña Personas.</p>';
+      : "";
     $("g-submit").disabled = !ps.length;
+    if (!ps.length) mostrarError($("g-error"), "Primero agregá a la gente del viaje en la pestaña Personas.");
   }
 
   function renderGastos() {
     var gs = gastos().slice().reverse();
+    var n = personas().length;
     $("lista-gastos").innerHTML = gs.length
       ? gs.map(function (g) {
-          var entre = (g.entre || []).length === personas().length ? "todos" : (g.entre || []).map(nombreDe).join(", ");
-          return "<li><div class=\"info\"><div class=\"titulo\">" + esc(g.descripcion) + "</div>" +
+          var entre = (g.entre || []).length === n ? "todos" : (g.entre || []).map(nombreDe).join(", ");
+          return '<li><div class="info"><div class="titulo">' + esc(g.descripcion) + "</div>" +
             '<div class="sub"><span class="tag">' + esc(g.categoria) + "</span>Pagó " + esc(nombreDe(g.pagoPor)) +
             " · entre " + esc(entre) + "</div></div>" +
             '<div class="monto">' + plata(g.monto) + "</div>" +
-            '<div class="botones"><button class="btn chico" data-editar-gasto="' + esc(g.id) + '" aria-label="Editar">✏️</button>' +
-            '<button class="btn chico peligro" data-borrar-gasto="' + esc(g.id) + '" aria-label="Borrar">🗑️</button></div></li>';
+            '<div class="botones">' + botonIcono("editar", "editar-gasto", g.id, "Editar") +
+            botonIcono("borrar", "borrar-gasto", g.id, "Eliminar") + "</div></li>";
         }).join("")
-      : '<li class="vacio">Todavía no hay gastos.</li>';
+      : '<li class="vacio">' + (n ? "Todavía no hay gastos. Tocá “+ Gasto” para cargar el primero." :
+          "Empezá agregando a la gente del viaje en Personas.") + "</li>";
+  }
+
+  function totales() {
+    var r = intentar(function () { return G.totalesPorPersona() || []; });
+    return r.ok ? r.valor : [];
   }
 
   function renderPersonas() {
-    var ps = personas();
-    var tot = {};
-    intentar(function () { G.totalesPorPersona().forEach(function (t) { tot[t.id] = t; }); });
+    var ps = personas(), tot = {};
+    totales().forEach(function (t) { tot[t.id] = t; });
     $("lista-personas").innerHTML = ps.length
       ? ps.map(function (p) {
           var t = tot[p.id];
           return '<li><div class="info"><div class="titulo">' + esc(p.nombre) + "</div>" +
             (t ? '<div class="sub">Pagó ' + plata(t.pagado) + " · consumió " + plata(t.consumido) + "</div>" : "") + "</div>" +
-            '<div class="botones"><button class="btn chico" data-editar-persona="' + esc(p.id) + '" aria-label="Editar">✏️</button>' +
-            '<button class="btn chico peligro" data-borrar-persona="' + esc(p.id) + '" aria-label="Borrar">🗑️</button></div></li>';
+            '<div class="botones">' + botonIcono("editar", "editar-persona", p.id, "Editar") +
+            botonIcono("borrar", "borrar-persona", p.id, "Eliminar") + "</div></li>";
         }).join("")
       : '<li class="vacio">Agregá a la gente del viaje.</li>';
   }
@@ -250,11 +364,14 @@
   function renderDeudas() {
     var r = intentar(function () { return G.calcularDeudas(); });
     var ds = r.ok ? r.valor || [] : [];
+    var puedePagar = tiene("registrarPago");
     $("lista-deudas").innerHTML = ds.length
       ? ds.map(function (d) {
           return '<li><div class="info"><div class="titulo">' + esc(nombreDe(d.de)) +
-            ' <span class="flecha">→</span> ' + esc(nombreDe(d.a)) + "</div></div>" +
-            '<div class="monto">' + plata(d.monto) + "</div></li>";
+            '<span class="flecha">→</span>' + esc(nombreDe(d.a)) + "</div></div>" +
+            '<div class="monto">' + plata(d.monto) + "</div>" +
+            (puedePagar ? '<button type="button" class="btn-chip" data-pagar-de="' + esc(d.de) + '" data-pagar-a="' + esc(d.a) +
+              '" data-pagar-monto="' + esc(d.monto) + '">Pagada</button>' : "") + "</li>";
         }).join("")
       : '<li class="vacio">' + (gastos().length ? "¡Están todos a mano! 🎉" : "Cargá gastos para ver las deudas.") + "</li>";
 
@@ -262,19 +379,28 @@
     intentar(function () { texto = G.textoWhatsApp() || ""; });
     var wa = $("btn-whatsapp");
     wa.href = "https://wa.me/?text=" + encodeURIComponent(texto);
-    wa.setAttribute("aria-disabled", ds.length ? "false" : "true");
-    $("btn-copiar").disabled = !ds.length;
+    wa.setAttribute("aria-disabled", gastos().length ? "false" : "true");
+    $("btn-copiar").disabled = !gastos().length;
     $("btn-copiar").dataset.texto = texto;
 
-    var ts = [];
-    intentar(function () { ts = G.totalesPorPersona() || []; });
-    $("tabla-personas").innerHTML = ts.length
+    var ps = tiene("borrarPago") ? pagos() : [];
+    $("bloque-pagos").hidden = !ps.length;
+    $("lista-pagos").innerHTML = ps.slice().reverse().map(function (p) {
+      return '<li><div class="info"><div class="titulo">' + esc(nombreDe(p.de)) + '<span class="flecha">→</span>' +
+        esc(nombreDe(p.a)) + '</div><div class="sub pos">Pagado</div></div>' +
+        '<div class="monto">' + plata(p.monto) + "</div>" +
+        '<div class="botones">' + botonIcono("borrar", "borrar-pago", p.id, "Eliminar pago") + "</div></li>";
+    }).join("");
+
+    var ts = totales();
+    $("lista-balance").innerHTML = ts.length
       ? ts.map(function (t) {
           var cls = t.balance > 0 ? "pos" : t.balance < 0 ? "neg" : "";
-          return "<tr><td>" + esc(t.nombre) + "</td><td>" + plata(t.pagado) + "</td><td>" + plata(t.consumido) +
-            '</td><td class="' + cls + '">' + (t.balance > 0 ? "+" : "") + plata(t.balance) + "</td></tr>";
+          return '<li><div class="info"><div class="titulo">' + esc(t.nombre) + '</div><div class="sub">Pagó ' +
+            plata(t.pagado) + " · consumió " + plata(t.consumido) + '</div></div><div class="monto ' + cls + '">' +
+            (t.balance > 0 ? "+" : "") + plata(t.balance) + "</div></li>";
         }).join("")
-      : '<tr><td colspan="4" class="vacio">Sin personas todavía.</td></tr>';
+      : '<li class="vacio">Sin personas todavía.</li>';
   }
 
   function renderResumen() {
@@ -287,56 +413,27 @@
       ? cs.map(function (c) {
           var exacto = total ? (c.total / total) * 100 : 0;
           var pct = exacto > 0 && exacto < 1 ? "<1" : String(Math.round(exacto));
-          return '<li><div class="barra-top"><span>' + esc(c.categoria) + ' <span class="sub">' + esc(pct) + "%</span></span><strong>" +
+          return '<li><div class="barra-top"><span>' + esc(c.categoria) + '<span class="sub">' + esc(pct) + "%</span></span><strong>" +
             plata(c.total) + '</strong></div><div class="barra"><div style="width:' + (c.total / max) * 100 + '%"></div></div></li>';
         }).join("")
       : '<li class="vacio">Todavía no hay gastos.</li>';
     $("total-viaje").textContent = plata(total);
+    $("bloque-respaldo").hidden = !(tiene("exportarViaje") && tiene("importarViaje"));
   }
 
-  function render() {
-    if (!editandoGasto) renderFormGasto();
-    renderGastos(); renderPersonas(); renderDeudas(); renderResumen();
-  }
+  function render() { renderGastos(); renderPersonas(); renderDeudas(); renderResumen(); }
 
-  // ---------- Confirmación propia para borrar (el cartel nativo del navegador lo bloquean WhatsApp/Instagram en iPhone) ----------
-  // Primer toque: el botón pasa a "¿Seguro?". Segundo toque dentro de 3 s: borra. Si no, vuelve a la normalidad.
-  var armado = null; // { btn, timer }
-  function desarmar() {
-    if (!armado) return;
-    clearTimeout(armado.timer);
-    armado.btn.textContent = "🗑️";
-    armado.btn.classList.remove("seguro");
-    armado.btn.setAttribute("aria-label", "Borrar");
-    armado = null;
-  }
-  function pedirSegundoToque(btn) {
-    if (armado && armado.btn === btn) { desarmar(); return true; }
-    desarmar();
-    btn.textContent = "¿Seguro?";
-    btn.classList.add("seguro");
-    btn.setAttribute("aria-label", "Tocá de nuevo para borrar");
-    armado = { btn: btn, timer: setTimeout(desarmar, 3000) };
-    return false;
-  }
-
-  // Tocar afuera cancela. Safari de iPhone no manda click en zonas vacías, por eso pointerdown.
-  // Se ignora si cae sobre un botón 🗑️: ahí decide el click (segundo toque borra, otro botón se re-arma).
-  document.addEventListener("pointerdown", function (ev) {
-    if (!armado) return;
-    if (ev.target.closest("button[data-borrar-gasto],button[data-borrar-persona]")) return;
-    desarmar();
-  });
-
-  // ---------- Delegación de clicks en listas ----------
+  // ---------- Clicks en las listas ----------
   document.addEventListener("click", function (ev) {
-    var b = ev.target.closest("button[data-editar-gasto],button[data-borrar-gasto],button[data-editar-persona],button[data-borrar-persona]");
-    if (!b) { desarmar(); return; }
-    if (!b.dataset.borrarGasto && !b.dataset.borrarPersona) desarmar();
-    if (b.dataset.editarGasto) editarGasto(b.dataset.editarGasto);
-    else if (b.dataset.borrarGasto) borrarGasto(b.dataset.borrarGasto, b);
-    else if (b.dataset.editarPersona) editarPersona(b.dataset.editarPersona);
-    else if (b.dataset.borrarPersona) borrarPersona(b.dataset.borrarPersona, b);
+    var b = ev.target.closest("button");
+    if (!b) return;
+    var d = b.dataset;
+    if (d.editarGasto) editarGasto(d.editarGasto);
+    else if (d.borrarGasto) borrarGasto(d.borrarGasto);
+    else if (d.editarPersona) editarPersona(d.editarPersona);
+    else if (d.borrarPersona) borrarPersona(d.borrarPersona);
+    else if (d.borrarPago) borrarPago(d.borrarPago);
+    else if (d.pagarDe) marcarPagada(d.pagarDe, d.pagarA, Number(d.pagarMonto));
   });
 
   $("btn-copiar").addEventListener("click", function () {
@@ -354,8 +451,11 @@
     document.body.removeChild(ta); return ok;
   }
 
-  // ---------- Arranque ----------
-  if (demo) $("aviso-demo").hidden = false;
-  // app.js ya llama a cargar() al cargarse y guarda solo en cada cambio.
+  // ---------- Instalable / sin internet ----------
+  if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) {
+    window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });
+  }
+
+  // ---------- Arranque ---------- (app.js ya llama a cargar() y guarda solo en cada cambio)
   render();
 })();

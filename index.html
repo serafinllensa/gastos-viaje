@@ -3,116 +3,148 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#0f766e">
+  <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+  <meta name="color-scheme" content="light dark">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Gastos">
+  <meta name="description" content="Dividí los gastos del viaje en grupo y mirá quién le paga a quién.">
   <title>Gastos del viaje</title>
-  <link rel="stylesheet" href="styles.css?v=5">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css?v=6">
 </head>
 <body>
-  <header class="top">
-    <h1>Gastos del viaje</h1>
-    <div class="total-pill">Total <strong id="total-viaje">$0</strong></div>
+  <header class="top" id="top">
+    <div class="top-inner">
+      <h1>Gastos del viaje</h1>
+      <div class="total-pill"><span>Total</span> <strong id="total-viaje">$0</strong></div>
+    </div>
   </header>
 
-  <div id="aviso-demo" class="aviso" hidden>
-    Modo maqueta: todavía no está <code>app.js</code>, se muestran datos de ejemplo.
-  </div>
-  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <div id="aviso-error" class="aviso" hidden>No se pudo cargar la lógica de la app (<code>app.js</code>). Recargá la página.</div>
 
   <main>
     <!-- GASTOS -->
     <section id="tab-gastos" class="tab activa" aria-labelledby="nav-gastos">
-      <form id="form-gasto" class="card" autocomplete="off" novalidate>
-        <h2 id="form-gasto-titulo">Nuevo gasto</h2>
-        <label>Descripción
-          <input id="g-descripcion" type="text" placeholder="Ej: Asado del sábado" maxlength="60" required>
-        </label>
-        <div class="fila">
-          <label>Monto ($)
-            <input id="g-monto" type="text" inputmode="numeric" placeholder="Ej: 30.000" maxlength="15" required>
-          </label>
-          <label>Categoría
-            <select id="g-categoria"></select>
-          </label>
-        </div>
-        <label>Pagó
-          <select id="g-pagopor"></select>
-        </label>
-        <fieldset>
-          <legend>Entre quiénes se divide
-            <button type="button" id="g-todos" class="link">Todos</button>
-          </legend>
-          <div id="g-entre" class="chips"></div>
-        </fieldset>
-        <p id="g-error" class="error" hidden></p>
-        <div class="acciones">
-          <button type="submit" class="btn primario" id="g-submit">Agregar gasto</button>
-          <button type="button" class="btn" id="g-cancelar" hidden>Cancelar</button>
-        </div>
-      </form>
-
-      <div class="card">
-        <h2>Gastos cargados</h2>
-        <ul id="lista-gastos" class="lista"></ul>
-      </div>
+      <h2 class="seccion">Gastos</h2>
+      <ul id="lista-gastos" class="grupo lista"></ul>
+      <button type="button" id="btn-nuevo-gasto" class="fab" aria-label="Agregar gasto">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Gasto</span>
+      </button>
     </section>
 
     <!-- PERSONAS -->
     <section id="tab-personas" class="tab" aria-labelledby="nav-personas">
-      <form id="form-persona" class="card" autocomplete="off" novalidate>
-        <h2 id="form-persona-titulo">Agregar persona</h2>
-        <div class="fila fila-boton">
-          <label class="crece">Nombre
-            <input id="p-nombre" type="text" placeholder="Ej: Juli" maxlength="30" required>
-          </label>
-          <button type="submit" class="btn primario" id="p-submit">Agregar</button>
-        </div>
-        <button type="button" class="btn" id="p-cancelar" hidden>Cancelar edición</button>
-        <p id="p-error" class="error" hidden></p>
+      <h2 class="seccion" id="form-persona-titulo">Agregar persona</h2>
+      <form id="form-persona" class="grupo form-inline" autocomplete="off" novalidate>
+        <input id="p-nombre" type="text" placeholder="Nombre, ej: Juli" maxlength="30" aria-label="Nombre" enterkeyhint="done">
+        <button type="submit" class="btn-texto fuerte" id="p-submit">Agregar</button>
       </form>
-      <div class="card">
-        <h2>Personas del viaje</h2>
-        <ul id="lista-personas" class="lista"></ul>
-      </div>
+      <button type="button" class="btn-texto chico" id="p-cancelar" hidden>Cancelar edición</button>
+      <p id="p-error" class="error" hidden></p>
+      <h2 class="seccion">Personas del viaje</h2>
+      <ul id="lista-personas" class="grupo lista"></ul>
     </section>
 
     <!-- DEUDAS -->
     <section id="tab-deudas" class="tab" aria-labelledby="nav-deudas">
-      <div class="card">
-        <h2>Quién le paga a quién</h2>
-        <ul id="lista-deudas" class="lista deudas"></ul>
-        <div class="acciones">
-          <a id="btn-whatsapp" class="btn whatsapp" target="_blank" rel="noopener">Compartir por WhatsApp</a>
-          <button type="button" class="btn" id="btn-copiar">Copiar texto</button>
-        </div>
+      <h2 class="seccion">Quién le paga a quién</h2>
+      <ul id="lista-deudas" class="grupo lista deudas"></ul>
+      <div class="acciones">
+        <a id="btn-whatsapp" class="btn whatsapp" target="_blank" rel="noopener">Compartir por WhatsApp</a>
+        <button type="button" class="btn gris" id="btn-copiar">Copiar texto</button>
       </div>
-      <div class="card">
-        <h2>Balance por persona</h2>
-        <div class="tabla-wrap">
-          <table class="tabla">
-            <thead><tr><th>Persona</th><th>Pagó</th><th>Consumió</th><th>Balance</th></tr></thead>
-            <tbody id="tabla-personas"></tbody>
-          </table>
-        </div>
+      <div id="bloque-pagos" hidden>
+        <h2 class="seccion">Ya pagado</h2>
+        <ul id="lista-pagos" class="grupo lista"></ul>
       </div>
+      <h2 class="seccion">Balance por persona</h2>
+      <ul id="lista-balance" class="grupo lista"></ul>
     </section>
 
     <!-- RESUMEN -->
     <section id="tab-resumen" class="tab" aria-labelledby="nav-resumen">
-      <div class="card">
-        <h2>Por categoría</h2>
-        <ul id="lista-categorias" class="lista barras"></ul>
+      <h2 class="seccion">Por categoría</h2>
+      <ul id="lista-categorias" class="grupo lista barras"></ul>
+      <div id="bloque-respaldo" hidden>
+        <h2 class="seccion">Respaldo del viaje</h2>
+        <div class="grupo respaldo">
+          <p class="nota">Guardá el viaje en un archivo para no perderlo o para pasárselo a tus amigos.</p>
+          <div class="acciones">
+            <button type="button" class="btn primario" id="btn-guardar-viaje">Guardar viaje</button>
+            <button type="button" class="btn gris" id="btn-cargar-viaje">Cargar viaje</button>
+          </div>
+          <input type="file" id="input-archivo" accept=".json,application/json" hidden>
+        </div>
       </div>
     </section>
   </main>
 
   <nav class="tabs" role="tablist">
-    <button role="tab" id="nav-gastos" data-tab="gastos" class="activa" aria-selected="true"><span class="ico">🧾</span>Gastos</button>
-    <button role="tab" id="nav-personas" data-tab="personas" aria-selected="false"><span class="ico">👥</span>Personas</button>
-    <button role="tab" id="nav-deudas" data-tab="deudas" aria-selected="false"><span class="ico">💸</span>Deudas</button>
-    <button role="tab" id="nav-resumen" data-tab="resumen" aria-selected="false"><span class="ico">📊</span>Resumen</button>
+    <button role="tab" id="nav-gastos" data-tab="gastos" class="activa" aria-selected="true">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>Gastos</button>
+    <button role="tab" id="nav-personas" data-tab="personas" aria-selected="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><circle cx="17" cy="9" r="2.6"/><path d="M16.5 14.6c2.6.1 4.4 1.8 5 4.4"/></svg>Personas</button>
+    <button role="tab" id="nav-deudas" data-tab="deudas" aria-selected="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h13l-3.5-3.5M20 16H7l3.5 3.5"/></svg>Deudas</button>
+    <button role="tab" id="nav-resumen" data-tab="resumen" aria-selected="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V11M12 20V5M19 20v-6"/></svg>Resumen</button>
   </nav>
 
-  <script src="app.js?v=5"></script>
-  <script src="ui.js?v=5"></script>
+  <!-- Hoja (sheet) del gasto -->
+  <div id="velo-hoja" class="velo" hidden></div>
+  <div id="hoja-gasto" class="hoja" role="dialog" aria-modal="true" aria-labelledby="form-gasto-titulo" hidden>
+    <form id="form-gasto" autocomplete="off" novalidate>
+      <div class="hoja-barra">
+        <button type="button" class="btn-texto" id="g-cancelar">Cancelar</button>
+        <h2 id="form-gasto-titulo">Nuevo gasto</h2>
+        <button type="submit" class="btn-texto fuerte" id="g-submit">Agregar</button>
+      </div>
+      <div class="hoja-cuerpo">
+        <div class="grupo campos">
+          <label class="campo"><span>Descripción</span>
+            <input id="g-descripcion" type="text" placeholder="Ej: Asado del sábado" maxlength="60" enterkeyhint="next">
+          </label>
+          <label class="campo"><span>Monto</span>
+            <input id="g-monto" type="text" inputmode="numeric" placeholder="$ 30.000" maxlength="15" enterkeyhint="done">
+          </label>
+          <label class="campo"><span>Categoría</span>
+            <select id="g-categoria"></select>
+          </label>
+          <label class="campo"><span>Pagó</span>
+            <select id="g-pagopor"></select>
+          </label>
+        </div>
+        <div class="fila-legend">
+          <h3 class="seccion">Entre quiénes se divide</h3>
+          <button type="button" id="g-todos" class="btn-texto chico">Todos</button>
+        </div>
+        <div id="g-entre" class="chips"></div>
+        <p id="g-error" class="error" hidden></p>
+      </div>
+    </form>
+  </div>
+
+  <!-- Cartel de confirmación estilo iOS -->
+  <div id="velo-alerta" class="velo velo-alerta" hidden></div>
+  <div id="alerta" class="alerta" role="alertdialog" aria-modal="true" aria-labelledby="alerta-titulo" aria-describedby="alerta-texto" hidden>
+    <div class="alerta-cuerpo">
+      <h2 id="alerta-titulo"></h2>
+      <p id="alerta-texto"></p>
+    </div>
+    <div class="alerta-botones">
+      <button type="button" id="alerta-cancelar">Cancelar</button>
+      <button type="button" id="alerta-ok" class="peligro">Eliminar</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="app.js?v=6"></script>
+  <script src="ui.js?v=6"></script>
 </body>
 </html>
