@@ -77,6 +77,7 @@ legend { font-size: .85rem; color: var(--suave); margin-bottom: 6px; display: fl
 .btn.whatsapp { background: var(--wa); border-color: var(--wa); color: #fff; }
 .btn.chico { padding: 6px 10px; min-height: 36px; font-size: .85rem; }
 .btn.peligro { color: var(--rojo); }
+.btn.peligro.seguro { background: var(--rojo); border-color: var(--rojo); color: #fff; }
 .btn[aria-disabled="true"], .btn:disabled { opacity: .5; pointer-events: none; }
 .link { background: none; border: 0; color: var(--verde); font: inherit; font-weight: 600; cursor: pointer; padding: 0; margin-left: auto; }
 .acciones { display: flex; gap: 10px; flex-wrap: wrap; }

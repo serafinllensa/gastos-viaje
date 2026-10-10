@@ -122,8 +122,8 @@
     $("form-persona").classList.add("editando");
     irA("personas"); $("p-nombre").focus();
   }
-  function borrarPersona(id) {
-    if (!confirm("¿Borrar a " + nombreDe(id) + "?")) return;
+  function borrarPersona(id, btn) {
+    if (!pedirSegundoToque(btn)) return;
     if (intentar(function () { return G.borrarPersona(id); }).ok) {
       if (editandoPersona === id) cancelarPersona();
       toast("Persona borrada"); render();
@@ -180,9 +180,9 @@
     $("form-gasto").classList.add("editando");
     irA("gastos"); $("g-descripcion").focus();
   }
-  function borrarGasto(id) {
+  function borrarGasto(id, btn) {
     var g = gastos().find(function (x) { return x.id === id; });
-    if (!confirm("¿Borrar el gasto " + (g ? "\"" + g.descripcion + "\"" : "") + "?")) return;
+    if (!pedirSegundoToque(btn)) return;
     if (intentar(function () { return G.borrarGasto(id); }).ok) {
       if (editandoGasto === id) cancelarGasto();
       toast("Gasto borrado"); render();
@@ -299,14 +299,36 @@
     renderGastos(); renderPersonas(); renderDeudas(); renderResumen();
   }
 
+  // ---------- Confirmación propia para borrar (el cartel nativo del navegador lo bloquean WhatsApp/Instagram en iPhone) ----------
+  // Primer toque: el botón pasa a "¿Seguro?". Segundo toque dentro de 3 s: borra. Si no, vuelve a la normalidad.
+  var armado = null; // { btn, timer }
+  function desarmar() {
+    if (!armado) return;
+    clearTimeout(armado.timer);
+    armado.btn.textContent = "🗑️";
+    armado.btn.classList.remove("seguro");
+    armado.btn.setAttribute("aria-label", "Borrar");
+    armado = null;
+  }
+  function pedirSegundoToque(btn) {
+    if (armado && armado.btn === btn) { desarmar(); return true; }
+    desarmar();
+    btn.textContent = "¿Seguro?";
+    btn.classList.add("seguro");
+    btn.setAttribute("aria-label", "Tocá de nuevo para borrar");
+    armado = { btn: btn, timer: setTimeout(desarmar, 3000) };
+    return false;
+  }
+
   // ---------- Delegación de clicks en listas ----------
   document.addEventListener("click", function (ev) {
     var b = ev.target.closest("button[data-editar-gasto],button[data-borrar-gasto],button[data-editar-persona],button[data-borrar-persona]");
-    if (!b) return;
+    if (!b) { desarmar(); return; }
+    if (!b.dataset.borrarGasto && !b.dataset.borrarPersona) desarmar();
     if (b.dataset.editarGasto) editarGasto(b.dataset.editarGasto);
-    else if (b.dataset.borrarGasto) borrarGasto(b.dataset.borrarGasto);
+    else if (b.dataset.borrarGasto) borrarGasto(b.dataset.borrarGasto, b);
     else if (b.dataset.editarPersona) editarPersona(b.dataset.editarPersona);
-    else if (b.dataset.borrarPersona) borrarPersona(b.dataset.borrarPersona);
+    else if (b.dataset.borrarPersona) borrarPersona(b.dataset.borrarPersona, b);
   });
 
   $("btn-copiar").addEventListener("click", function () {
