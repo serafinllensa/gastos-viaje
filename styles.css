@@ -138,3 +138,6 @@ legend { font-size: .85rem; color: var(--suave); margin-bottom: 6px; display: fl
   .top { order: 0; } .aviso { order: 1; } .tabs { order: 2; } main { order: 3; width: 100%; }
   .toast { bottom: 24px; }
 }
+
+/* iPhone: evita que el doble toque haga zoom y se coma el segundo toque */
+html, button, a, input, select, label { touch-action: manipulation; }
