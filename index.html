@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f766e">
+  <title>Gastos del viaje</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="top">
+    <h1>Gastos del viaje</h1>
+    <div class="total-pill">Total <strong id="total-viaje">$0</strong></div>
+  </header>
+
+  <div id="aviso-demo" class="aviso" hidden>
+    Modo maqueta: todavía no está <code>app.js</code>, se muestran datos de ejemplo.
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <main>
+    <!-- GASTOS -->
+    <section id="tab-gastos" class="tab activa" aria-labelledby="nav-gastos">
+      <form id="form-gasto" class="card" autocomplete="off" novalidate>
+        <h2 id="form-gasto-titulo">Nuevo gasto</h2>
+        <label>Descripción
+          <input id="g-descripcion" type="text" placeholder="Ej: Asado del sábado" maxlength="60" required>
+        </label>
+        <div class="fila">
+          <label>Monto ($)
+            <input id="g-monto" type="text" inputmode="numeric" placeholder="Ej: 30.000" maxlength="15" required>
+          </label>
+          <label>Categoría
+            <select id="g-categoria"></select>
+          </label>
+        </div>
+        <label>Pagó
+          <select id="g-pagopor"></select>
+        </label>
+        <fieldset>
+          <legend>Entre quiénes se divide
+            <button type="button" id="g-todos" class="link">Todos</button>
+          </legend>
+          <div id="g-entre" class="chips"></div>
+        </fieldset>
+        <p id="g-error" class="error" hidden></p>
+        <div class="acciones">
+          <button type="submit" class="btn primario" id="g-submit">Agregar gasto</button>
+          <button type="button" class="btn" id="g-cancelar" hidden>Cancelar</button>
+        </div>
+      </form>
+
+      <div class="card">
+        <h2>Gastos cargados</h2>
+        <ul id="lista-gastos" class="lista"></ul>
+      </div>
+    </section>
+
+    <!-- PERSONAS -->
+    <section id="tab-personas" class="tab" aria-labelledby="nav-personas">
+      <form id="form-persona" class="card" autocomplete="off" novalidate>
+        <h2 id="form-persona-titulo">Agregar persona</h2>
+        <div class="fila fila-boton">
+          <label class="crece">Nombre
+            <input id="p-nombre" type="text" placeholder="Ej: Juli" maxlength="30" required>
+          </label>
+          <button type="submit" class="btn primario" id="p-submit">Agregar</button>
+        </div>
+        <button type="button" class="btn" id="p-cancelar" hidden>Cancelar edición</button>
+        <p id="p-error" class="error" hidden></p>
+      </form>
+      <div class="card">
+        <h2>Personas del viaje</h2>
+        <ul id="lista-personas" class="lista"></ul>
+      </div>
+    </section>
+
+    <!-- DEUDAS -->
+    <section id="tab-deudas" class="tab" aria-labelledby="nav-deudas">
+      <div class="card">
+        <h2>Quién le paga a quién</h2>
+        <ul id="lista-deudas" class="lista deudas"></ul>
+        <div class="acciones">
+          <a id="btn-whatsapp" class="btn whatsapp" target="_blank" rel="noopener">Compartir por WhatsApp</a>
+          <button type="button" class="btn" id="btn-copiar">Copiar texto</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Balance por persona</h2>
+        <div class="tabla-wrap">
+          <table class="tabla">
+            <thead><tr><th>Persona</th><th>Pagó</th><th>Consumió</th><th>Balance</th></tr></thead>
+            <tbody id="tabla-personas"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- RESUMEN -->
+    <section id="tab-resumen" class="tab" aria-labelledby="nav-resumen">
+      <div class="card">
+        <h2>Por categoría</h2>
+        <ul id="lista-categorias" class="lista barras"></ul>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" id="nav-gastos" data-tab="gastos" class="activa" aria-selected="true"><span class="ico">🧾</span>Gastos</button>
+    <button role="tab" id="nav-personas" data-tab="personas" aria-selected="false"><span class="ico">👥</span>Personas</button>
+    <button role="tab" id="nav-deudas" data-tab="deudas" aria-selected="false"><span class="ico">💸</span>Deudas</button>
+    <button role="tab" id="nav-resumen" data-tab="resumen" aria-selected="false"><span class="ico">📊</span>Resumen</button>
+  </nav>
+
+  <script src="app.js"></script>
+  <script src="ui.js"></script>
+</body>
+</html>
