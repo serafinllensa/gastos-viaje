@@ -15,6 +15,7 @@
   --nav-alto: 64px;
 }
 * { box-sizing: border-box; }
+html, body { overscroll-behavior-y: none; }
 html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;
